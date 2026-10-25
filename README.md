@@ -6,15 +6,16 @@
 
 ## 功能范围
 
-服务只注册以下三个业务工具：
+服务只注册以下四个业务工具：
 
 | 领域 | MCP 工具 | 能力 |
 | --- | --- | --- |
 | 训练 | `xunji_get_training` | 按指定日期读取训练；可选完整数据，包括 RPE、备注、未完成组、递减组及心率摘要 |
+| 最近训练 | `xunji_get_latest_training` | 基准日及之前 6 天内，从近到远查找最近一个有训练的日期，返回该日全部训练 |
 | 饮食 | `xunji_get_food` | 按明确日期范围读取食物、份量和接口提供的营养明细 |
 | 身体数据 | `xunji_get_body` | 按日期范围和指标类型读取身体数据，支持分页 |
 
-三个工具均声明为只读、非破坏性、幂等操作。
+四个工具均声明为只读、非破坏性、幂等操作。
 
 明确不支持：
 
@@ -26,7 +27,7 @@
 
 ## ChatGPT 直接调用（无需加载 skill）
 
-连接 MCP 服务并完成 Cloudflare Access 登录后，ChatGPT 可通过 `tools/list` 获取三个工具的用途、参数、结果解释和错误处理规则；不需要先读取本仓库的 skill 快照，也不需要在聊天中提供 API Key。原 API 文档仅作为开发参考，不是运行时依赖。
+连接 MCP 服务并完成 Cloudflare Access 登录后，ChatGPT 可通过 `tools/list` 获取四个工具的用途、参数、结果解释和错误处理规则；不需要先读取本仓库的 skill 快照，也不需要在聊天中提供 API Key。原 API 文档仅作为开发参考，不是运行时依赖。
 
 调用所需信息直接放在工具描述和参数 Schema 中，不依赖额外的 Resource、Prompt 或服务级说明。工具名称、认证方式和成功返回数据格式保持兼容。服务端继续负责参数校验、只读接口访问和凭据保护；描述中的复用结果、限频等待和分析规则用于指导客户端，不代表服务端新增了缓存或自动翻页。
 
@@ -56,6 +57,21 @@
 
 `datestr` 必须是 `YYYY-MM-DD`。需要 RPE、备注、未完成组、递减组或心率摘要时，将 `include_full_data` 设为 `true`。
 
+### 最近训练（最多回溯 7 天）
+
+`xunji_get_latest_training` 输入：
+
+```json
+{
+  "as_of_date": "2026-10-25",
+  "include_full_data": false
+}
+```
+
+`as_of_date` 必填，由客户端按用户时区确定；范围包含该日及之前 6 天。从近到远串行调用现有按日接口，找到非空 `res.trains` 即停止，返回该日全部训练，不处理同一天训练之间的先后顺序。最多 7 次上游请求，未新增官方 API，也不承诺减少上游请求或限频风险。
+
+结果包含 `start_date`、`end_date`、`checked_dates`（已尝试日期）、`matched_date`、`found`、`search_complete` 和 `res`。`search_complete: true` 表示已确定查找结论，不代表扫描了全部 7 天；`found: false` 仅表示这 7 天内无记录，不推断更早历史。遇到认证、限频、网络或响应错误立即停止并返回 `isError: true`，文本中的 JSON 包含 `failed_date`、`checked_dates`、`search_complete: false` 和错误提示；不得跳过错误日期，也不自动重试。
+
 ### 饮食
 
 `xunji_get_food` 输入：
@@ -69,6 +85,16 @@
 ```
 
 开始日期不能晚于结束日期。查询范围限制为调用当日之前一年到之后三个月；单日查询时传入相同的开始和结束日期。
+
+饮食明细在 `res.days[].foods.records[]`。每条记录新增 `totalCal: number | null`，表示实际摄入总热量（kcal，四舍五入保留两位小数）：
+
+```text
+totalCal = 实际摄入克数 / 100 × ntr.cal
+```
+
+例如 120 g、276 kcal/100 g 的贝果，`totalCal` 为 `331.2`。`amount`、`ntr.cal` 支持非负有限数值或十进制数字字符串；零是有效值，空字符串和无效值不当作零。单位 `g`/`克` 直接计算；其他单位仅匹配 `ntr.foodUnit[]` 的相同 `unit`，使用明确的每单位 `gram`，不猜测大小、密度或相似单位。`count` 缺省或为 1 时可换算，其他值因文档未明确关系不换算；缺失、无效或冲突的换算均返回 `null`。
+
+原有字段和 `ntr.foodUnit` 全部保留，已有的记录级 `totalCal` 也不覆盖。历史兼容字段 `cals` 不参与计算；每日 `res.days[].totals.totalCal` 保持上游值及其含义，不用新增明细字段重新计算覆盖。上游营养异常（例如脂肪超过 100 g/100 g）保留原值，不静默修正，也不额外添加数据质量标记。未返回明细时不构造记录。
 
 ### 身体数据
 
@@ -168,7 +194,7 @@ MCP 地址：
 https://<worker-name>.<subdomain>.workers.dev/mcp
 ```
 
-连接并完成 Cloudflare Access 登录后，工具列表中应当只出现三个训记工具。
+连接并完成 Cloudflare Access 登录后，工具列表中应当只出现四个训记工具。
 
 ## 本地开发与验证
 

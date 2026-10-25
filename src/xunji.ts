@@ -1,4 +1,5 @@
-import { trainingDescription, foodDescription } from "./tool-descriptions.ts";
+import { withFoodCalories } from "./food-calories.ts";
+import { trainingDescription, foodDescription, latestTrainingDescription } from "./tool-descriptions.ts";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { gunzipSync } from "node:zlib";
@@ -13,6 +14,11 @@ export const trainingInput = z.object({
 	include_full_data: z.boolean().default(false).describe(
 		"默认 false；查询 RPE、备注、完成感受、未完成组、左右侧重量、计时、休息、递减组、超级组细节或心率时必须为 true。",
 	),
+});
+
+export const latestTrainingInput = z.object({
+	as_of_date: z.iso.date().describe("用户时区的基准日 YYYY-MM-DD；今天先换算为明确日期。包含该日及之前6天，最多7天。"),
+	include_full_data: trainingInput.shape.include_full_data,
 });
 
 const TRAINING_URL = "https://trains.xunjiapp.cn/api_trains_for_llm_v2";
@@ -76,7 +82,7 @@ export async function getFood(
 			if (/仅VIP可用/.test(message)) return failure("XUNJI_FOOD_VIP: This API requires VIP membership.");
 			return failure("XUNJI_FOOD_RESPONSE: Expected success:true and res from the food API.");
 		}
-		const text = JSON.stringify({ start_date: parsed.data.start_date, end_date: parsed.data.end_date, res: result.res }).split(key).join("[REDACTED]");
+		const text = JSON.stringify({ start_date: parsed.data.start_date, end_date: parsed.data.end_date, res: withFoodCalories(result.res) }).split(key).join("[REDACTED]");
 		return { content: [{ type: "text" as const, text }] };
 	} catch (error) {
 		const timeout = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
@@ -162,6 +168,38 @@ export async function getTraining(
 	}
 }
 
+/** Bounded scan over the existing date API; never skip an upstream error. */
+export async function getLatestTraining(
+	bindings: XunjiEnv,
+	input: z.input<typeof latestTrainingInput>,
+	fetcher: typeof fetch = fetch,
+) {
+	const parsed = latestTrainingInput.safeParse(input);
+	if (!parsed.success) return failure("XUNJI_LATEST_INPUT: Use a valid as_of_date (YYYY-MM-DD) and boolean include_full_data.");
+	const dateAt = (offset: number) => {
+		const day = new Date(`${parsed.data.as_of_date}T00:00:00Z`);
+		day.setUTCDate(day.getUTCDate() - offset);
+		return day.toISOString().slice(0, 10);
+	};
+	const range = { start_date: dateAt(6), end_date: parsed.data.as_of_date };
+	const checked_dates: string[] = [];
+	for (let offset = 0; offset < 7; offset++) {
+		const datestr = dateAt(offset);
+		checked_dates.push(datestr);
+		const result = await getTraining(bindings, { datestr, include_full_data: parsed.data.include_full_data }, fetcher);
+		if ("isError" in result && result.isError) {
+			return failure(JSON.stringify({ ...range, checked_dates, failed_date: datestr,
+				search_complete: false, error: result.content[0].text }));
+		}
+		const data = JSON.parse(result.content[0].text);
+		if (data.res.trains.length) return { content: [{ type: "text" as const,
+			text: JSON.stringify({ ...range, checked_dates, search_complete: true,
+				found: true, matched_date: datestr, res: data.res }) }] };
+	}
+	return { content: [{ type: "text" as const, text: JSON.stringify({ ...range, checked_dates,
+		search_complete: true, found: false, matched_date: null, res: { trains: [] } }) }] };
+}
+
 export function registerXunjiTools(server: McpServer, bindings: XunjiEnv, authenticated: boolean) {
 	server.registerTool("xunji_get_food", {
 		description: foodDescription,
@@ -170,6 +208,14 @@ export function registerXunjiTools(server: McpServer, bindings: XunjiEnv, authen
 	}, async (input) => {
 		if (!authenticated) return failure("Sign in through Cloudflare Access before reading Xunji food data.");
 		return getFood(bindings, input);
+	});
+	server.registerTool("xunji_get_latest_training", {
+		description: latestTrainingDescription,
+		inputSchema: latestTrainingInput,
+		annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+	}, async (input) => {
+		if (!authenticated) return failure("Sign in through Cloudflare Access before reading Xunji data.");
+		return getLatestTraining(bindings, input);
 	});
 	server.registerTool("xunji_get_training", {
 		description: trainingDescription,
