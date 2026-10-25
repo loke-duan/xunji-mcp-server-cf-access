@@ -2,6 +2,7 @@
 	"name": "mcp-server-cf-access",
 	"version": "0.0.1",
 	"private": true,
+	"license": "MIT",
 	"type": "module",
 	"scripts": {
 		"deploy": "wrangler deploy",
