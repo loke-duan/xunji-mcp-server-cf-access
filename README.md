@@ -171,13 +171,17 @@ https://<worker-name>.<subdomain>.workers.dev/callback
 | `ACCESS_JWKS_URL` | OIDC JWKS endpoint |
 | `COOKIE_ENCRYPTION_KEY` | 高强度随机密钥 |
 
-训记配置：
+#### 获取训记 API Key
 
-```text
-XUNJI_TRAIN_API_KEY
-XUNJI_FOOD_API_KEY
-XUNJI_BODY_API_KEY
-```
+打开训记 App，依次进入 **我的 → 数据导入和导出**，申请本服务所需的训练、饮食和身体数据 Key，然后分别配置为对应的 Worker Secret：
+
+| 训记 Key | Worker Secret |
+| --- | --- |
+| 训练数据 Key | `XUNJI_TRAIN_API_KEY` |
+| 饮食数据 Key | `XUNJI_FOOD_API_KEY` |
+| 身体数据 Key | `XUNJI_BODY_API_KEY` |
+
+三个 Key 分别用于对应的数据查询，请勿混用；无需申请模板 Key 或食物搜索 Key。
 
 Key 只填写原始值，不添加 `Bearer ` 前缀，不要写入仓库、聊天、工具参数或 `wrangler.jsonc`。
 
