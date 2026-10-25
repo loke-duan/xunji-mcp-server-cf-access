@@ -1,3 +1,4 @@
+import { trainingDescription, foodDescription } from "./tool-descriptions.ts";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { gunzipSync } from "node:zlib";
@@ -8,18 +9,18 @@ export interface XunjiEnv {
 }
 
 export const trainingInput = z.object({
-	datestr: z.iso.date().describe("Training date in the user's timezone, YYYY-MM-DD."),
+	datestr: z.iso.date().describe("用户时区的训练日期 YYYY-MM-DD；今天/昨天先换算为明确日期。一次查询一天。"),
 	include_full_data: z.boolean().default(false).describe(
-		"Include RPE, notes, unfinished sets, drop sets and heart-rate summaries.",
+		"默认 false；查询 RPE、备注、完成感受、未完成组、左右侧重量、计时、休息、递减组、超级组细节或心率时必须为 true。",
 	),
 });
 
 const TRAINING_URL = "https://trains.xunjiapp.cn/api_trains_for_llm_v2";
 
 export const foodInput = z.object({
-	start_date: z.iso.date().describe("First requested food-record date in the user's timezone, YYYY-MM-DD."),
-	end_date: z.iso.date().describe("Last requested food-record date in the user's timezone, YYYY-MM-DD."),
-	include_detail: z.boolean().default(true).describe("Include individual foods, quantities and nutrition details."),
+	start_date: z.iso.date().describe("用户时区的开始日期 YYYY-MM-DD，包含该日；不得晚于 end_date。"),
+	end_date: z.iso.date().describe("用户时区的结束日期 YYYY-MM-DD，包含该日；单日与 start_date 相同。"),
+	include_detail: z.boolean().default(true).describe("默认 true，包含接口提供的食物、份量和营养明细；不保证所有营养字段均存在。"),
 }).refine(value => value.start_date <= value.end_date, "start_date must not exceed end_date");
 
 function isoDateOffset(now: Date, years: number, months: number) {
@@ -163,7 +164,7 @@ export async function getTraining(
 
 export function registerXunjiTools(server: McpServer, bindings: XunjiEnv, authenticated: boolean) {
 	server.registerTool("xunji_get_food", {
-		description: "Read Xunji food and nutrition records for an explicitly requested date range within the past year and next three months. Uses the separate food Worker secret and returns individual foods and totals where provided. Read-only; no food search, creation, template operations or writes.",
+		description: foodDescription,
 		inputSchema: foodInput,
 		annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 	}, async (input) => {
@@ -171,7 +172,7 @@ export function registerXunjiTools(server: McpServer, bindings: XunjiEnv, authen
 		return getFood(bindings, input);
 	});
 	server.registerTool("xunji_get_training", {
-		description: "Read Xunji training logs for a specified date. Only call when the user requests their training data. Read-only; use include_full_data for RPE, notes and heart rate. Credentials stay in Worker secrets.",
+		description: trainingDescription,
 		inputSchema: trainingInput,
 		annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 	}, async (input) => {
