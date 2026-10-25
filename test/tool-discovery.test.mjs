@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { registerXunjiTools } from '../src/xunji.ts';
 import { registerBodyTools } from '../src/xunji-body.ts';
 
-test('tools/list exposes three self-contained tools and described parameter schemas without a skill', { timeout: 10000 }, async () => {
+test('tools/list exposes four self-contained tools and described parameter schemas without a skill', { timeout: 10000 }, async () => {
  const server = new McpServer({ name: 'discovery-test', version: '1' });
  registerXunjiTools(server, {}, false);
  registerBodyTools(server, {}, false);
@@ -27,7 +27,7 @@ test('tools/list exposes three self-contained tools and described parameter sche
   const response = await request('tools/list');
   assert.equal(response.error, undefined);
   const tools = Object.fromEntries(response.result.tools.map(tool => [tool.name, tool]));
-  assert.deepEqual(Object.keys(tools).sort(), ['xunji_get_body', 'xunji_get_food', 'xunji_get_training']);
+  assert.deepEqual(Object.keys(tools).sort(), ['xunji_get_body', 'xunji_get_food', 'xunji_get_latest_training', 'xunji_get_training']);
   for (const tool of Object.values(tools)) {
    assert.equal(tool.annotations.readOnlyHint, true);
    assert.equal(tool.annotations.destructiveHint, false);
@@ -48,6 +48,13 @@ test('tools/list exposes three self-contained tools and described parameter sche
   assert.match(food.description, /不静默截断/);
   assert.match(food.description, /不将汇总和明细重复累计/);
   assert.equal(food.inputSchema.properties.include_detail.default, true);
+  assert.match(food.description, /totalCal/);
+  const latest = tools.xunji_get_latest_training;
+  assert.deepEqual(latest.inputSchema.required, ['as_of_date']);
+  assert.equal(latest.inputSchema.properties.include_full_data.default, false);
+  assert.match(latest.description, /最多7次/);
+  const latestDenied = await request('tools/call', { name: 'xunji_get_latest_training', arguments: { as_of_date: '2026-10-25' } });
+  assert.equal(latestDenied.result.isError, true);
   const body = tools.xunji_get_body;
   assert.match(body.description, /weist腰围/);
   assert.match(body.description, /未明确 latest/);
