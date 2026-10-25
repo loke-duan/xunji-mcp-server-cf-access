@@ -237,6 +237,14 @@ npx wrangler deploy --dry-run
 - 感谢训记提供 API 接口和原始 skill 文档。
 - 感谢 G老师（ChatGPT）提供技术支持；本仓库代码均由 G老师根据项目维护者提出的需求编写，项目维护者负责配置、部署和实际使用验证。
 
+## 许可证
+
+本项目代码采用 [MIT License](./LICENSE)，允许使用、修改、分发和商用；分发时须保留版权及许可声明。软件按原样提供，不作担保。
+
+本项目基于 Cloudflare 官方的 [remote-mcp-cf-access 示例](https://github.com/cloudflare/ai/tree/e64009349c9af37cd3820a16ff4448103148b0f1/demos/remote-mcp-cf-access) 开发，保留其 MIT 许可证和 `Copyright (c) 2025 Cloudflare, Inc.` 声明；本项目新增代码的版权署名为 `Copyright (c) 2026 loke-duan`。
+
+第三方依赖遵循各自许可证。[训记 API 文档快照](./xunji-all-skills_20261023.md) 不纳入本项目的 MIT 授权，相关权利归原权利人所有。代码许可不授予训记 API 或 Cloudflare 服务的访问权限，使用者仍需自行配置凭据并遵守相关服务条款。
+
 ## 参考资料
 
 - [Cloudflare：Secure MCP servers](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/secure-mcp-servers/)
