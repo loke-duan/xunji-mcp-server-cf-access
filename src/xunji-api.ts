@@ -39,7 +39,11 @@ export async function postXunji(target: keyof typeof apiTargets, key: string | u
    const known = ["apikey missing", "apikey invalid", "仅VIP可用"];
    const matched = known.find(s => text.toLowerCase().includes(s.toLowerCase()));
    if (/too frequent/i.test(text)) return { ok: false, error: `XUNJI_RATE_LIMIT: Wait before retrying.${typeof data.retry_after_ms === "number" ? ` Retry after ${data.retry_after_ms} ms.` : ""}` };
-   return { ok: false, error: `XUNJI_API: ${matched ?? "Missing successful res response"}.` };
+   if (matched === "apikey missing" || matched === "apikey invalid") {
+    return { ok: false, error: "XUNJI_AUTH: Xunji rejected the body key. Ask the service maintainer to update XUNJI_BODY_API_KEY in Worker secrets; do not send keys in chat." };
+   }
+   if (matched === "仅VIP可用") return { ok: false, error: "XUNJI_VIP: This API requires VIP membership." };
+   return { ok: false, error: "XUNJI_API: Missing successful res response." };
   }
   return { ok: true, data };
  } catch (e) {
