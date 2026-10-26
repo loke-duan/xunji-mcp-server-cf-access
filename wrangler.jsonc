@@ -15,7 +15,7 @@
     }
   ],
   "observability": {
-    "enabled": true
+    "enabled": false
   },
   "dev": {
     "port": 8788
